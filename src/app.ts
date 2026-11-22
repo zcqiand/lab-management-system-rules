@@ -6,6 +6,7 @@ import { catalogRoutes } from "./routes/catalog.js";
 import { paramInterfaceRoutes } from "./routes/param-interfaces.js";
 import { reportNameRoutes } from "./routes/report-names.js";
 import { reportNameInterfaceRoutes } from "./routes/report-name-interfaces.js";
+import { technicalRequirementRoutes } from "./routes/technical-requirements.js";
 import { requireEnv } from "./lib/env-required.js";
 import { LabJwtSigner } from "./lib/auth/jwt.js";
 import type { SaasFetch } from "./lib/auth/saas-client.js";
@@ -47,5 +48,6 @@ export async function buildApp(
   await app.register(paramInterfaceRoutes);
   await app.register(reportNameRoutes);
   await app.register(reportNameInterfaceRoutes);
+  await app.register(technicalRequirementRoutes);
   return app;
 }
