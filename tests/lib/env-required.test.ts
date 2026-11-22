@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { requireEnv } from "@/lib/env-required.js";
 
-// fn: 基建无业务 fn-ID（R2 Task 3，非 trace 面）
+// 工程设施测试不挂业务 fn-ID（fn.ts 纪律）
 describe("requireEnv", () => {
   const KEY = "RULES_TEST_ENV_REQUIRED_PROBE";
   const original = process.env[KEY];

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { LabJwtSigner } from "@/lib/auth/jwt.js";
 import { requireTenant } from "@/lib/auth/require-tenant.js";
 
-// fn: M06 全域鉴权入口（ADR-0019；R2 Task 3）
+// 工程设施测试不挂业务 fn-ID（fn.ts 纪律）
 const SECRET = "rules-test-secret-0123456789abcdef-32bytes!";
 const signer = new LabJwtSigner(SECRET, "lab-rules-test", 3600);
 
