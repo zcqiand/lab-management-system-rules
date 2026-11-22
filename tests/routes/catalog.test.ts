@@ -180,6 +180,20 @@ describe("DELETE /api/catalog/brands/{code}", () => {
       expect(res2.json().code).toBe("NOT_FOUND");
     },
   );
+
+  // CT live axios 形状（client() 默认全请求带 content-type: application/json）：
+  // DELETE 无 body + json CT 必须到达路由处理（404 NOT_FOUND），
+  // 不得 Fastify 框架级 400 FST_ERR_CTP_EMPTY_JSON_BODY——家族后端
+  // （springboot/aspnetcore/go 对此均宽容 2xx/404）语义对齐，2026-11-22 live 实证。
+  it("空 body + json content-type → 到达路由（404 NOT_FOUND 非 400）", async () => {
+    const res = await app.inject({
+      method: "DELETE",
+      url: "/api/catalog/brands/R2-CT-EMPTY-JSON",
+      headers: { ...authz, "content-type": "application/json" },
+    });
+    expect(res.statusCode).toBe(404);
+    expect(res.json().code).toBe("NOT_FOUND");
+  });
 });
 
 describe("401 全域", () => {

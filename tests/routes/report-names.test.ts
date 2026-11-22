@@ -164,6 +164,48 @@ describe("GET/PUT/DELETE /api/report-names/{code}", () => {
 });
 
 describe("links 三族", () => {
+  // CT live 四方比对（M96.F02.I06-I08）：links GET 须 Page envelope 四字段，
+  // nextjs wrapLinks 镜像——page 默认 1；pageSize 默认 items.length（空集=0，
+  // 2026-11-01 CT 收口禁 || 1 兜底）；total=items.length；不切片。
+  fnTest(
+    ["M06.F07.I06"],
+    "links GET Page envelope：四字段 + 默认值 + 空集 0",
+    async () => {
+      const empty = await app.inject({
+        method: "GET",
+        url: "/api/report-names/links/object?reportNameCode=R2-RN-NOPE",
+        headers: authz,
+      });
+      expect(empty.statusCode).toBe(200);
+      expect(empty.json()).toEqual({ items: [], total: 0, page: 1, pageSize: 0 });
+
+      const payload = { inspectionObjectCode: OBJ, reportNameCode: "R2-RN-A" };
+      await app.inject({
+        method: "POST",
+        url: "/api/report-names/links/object",
+        headers: authz,
+        payload,
+      });
+      const list = await app.inject({
+        method: "GET",
+        url: "/api/report-names/links/object?reportNameCode=R2-RN-A",
+        headers: authz,
+      });
+      expect(list.statusCode).toBe(200);
+      const body = list.json();
+      expect(body.page).toBe(1);
+      expect(body.pageSize).toBe(body.items.length);
+      expect(body.total).toBe(body.items.length);
+      expect(body.total).toBeGreaterThan(0);
+      await app.inject({
+        method: "DELETE",
+        url: "/api/report-names/links/object",
+        headers: authz,
+        payload,
+      });
+    },
+  );
+
   fnTest(["M06.F07.I06", "M06.F04.I05"], "object link/unlink 204 幂等往返", async () => {
     const payload = { inspectionObjectCode: OBJ, reportNameCode: "R2-RN-A" };
     const r1 = await app.inject({

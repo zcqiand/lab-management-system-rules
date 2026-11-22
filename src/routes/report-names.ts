@@ -179,7 +179,17 @@ export async function reportNameRoutes(app: FastifyInstance): Promise<void> {
           .from(table)
           .where(conds.length ? and(...conds) : undefined)
       ).map((r) => toDto(r as Row));
-      return reply.send({ items, total: items.length });
+      // Page envelope 四字段（nextjs wrapLinks 镜像）：page 默认 1；
+      // pageSize 默认 items.length（空集=0，2026-11-01 CT 收口禁 || 1 兜底）；不切片。
+      const pageRaw = Number(q.page);
+      const pageSizeRaw = Number(q.pageSize);
+      return reply.send({
+        items,
+        total: items.length,
+        page: Number.isFinite(pageRaw) && pageRaw > 0 ? pageRaw : 1,
+        pageSize:
+          Number.isFinite(pageSizeRaw) && pageSizeRaw > 0 ? pageSizeRaw : items.length,
+      });
     });
 
     app.post(PATH, async (req, reply) => {

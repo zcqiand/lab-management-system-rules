@@ -3,6 +3,7 @@ import { and, eq, inArray } from "drizzle-orm";
 import { db } from "@/db/client.js";
 import {
   inspectionCalculationMethods,
+  inspectionObjects,
   inspectionTechnicalRequirements,
   testRecords,
 } from "@/db/schema.js";
@@ -24,7 +25,10 @@ const tokenB = await app.labJwt.issue("test-user", "tenant-B");
 const authzB = { authorization: `Bearer ${tokenB}` };
 
 const OBJ_A = "OBJ-PG-T-CALC"; // 升序在前 → records 链取它
-const OBJ_B = "OBJ-SP01-P1";
+// OBJ_B 专属行（自建+清理）：禁复用种子行 OBJ-SP01-P1——与
+// calculation-methods.test.ts R6-1 同三键 (obj,IP-0005,GB 13788-2024)，
+// vitest 并行进程互撞 PK / 互删行（2026-11-22 全量 5 红假红实证）。
+const OBJ_B = "OBJ-PG-T-CALC-Z";
 const PARAM = "IP-0005";
 const STD = "GB 13788-2024";
 const SAMPLE = "SAMPLE-FM-0017";
@@ -36,6 +40,8 @@ const BASE = "/api/calc";
 
 async function cleanupAll() {
   await db.delete(testRecords).where(inArray(testRecords.id, REC_IDS));
+  // OBJ_B 专属行先删方法行再删 obj 本体（FK cascade 兜底，显式删防御半删态）
+  await db.delete(inspectionObjects).where(eq(inspectionObjects.code, OBJ_B));
   await db
     .delete(inspectionCalculationMethods)
     .where(
@@ -57,6 +63,13 @@ async function cleanupAll() {
 
 beforeAll(async () => {
   await cleanupAll();
+  // OBJ_B 专属 obj 行（FK calc_rule_object_fk 必须真行；cleanupAll cascade 兜）
+  await db.insert(inspectionObjects).values({
+    code: OBJ_B,
+    sourceProjectNo: "R2-CALC-TEST",
+    sourceProjectName: "R2 calc 段测试自建",
+    name: "calc 测试 OBJ_B（升序在后）",
+  });
   await db.insert(inspectionCalculationMethods).values([
     {
       inspectionObjectCode: OBJ_A,

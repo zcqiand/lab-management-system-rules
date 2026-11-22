@@ -29,6 +29,23 @@ export async function buildApp(
 ): Promise<FastifyInstance> {
   const app = Fastify({ logger: true });
 
+  // 空 body + json content-type 宽容（家族后端语义对齐）：axios/HTTP 客户端普遍
+  // 全请求带 content-type: application/json，DELETE/GET 无 body 时 Fastify 默认
+  // 400 FST_ERR_CTP_EMPTY_JSON_BODY，与 springboot/aspnetcore/go 的宽容语义分叉
+  // （2026-11-22 CT live 实证）。空串→undefined，非空照常 JSON.parse。
+  app.addContentTypeParser(
+    "application/json",
+    { parseAs: "string" },
+    (_req, body, done) => {
+      if (body === "" || body == null) return done(null, undefined);
+      try {
+        done(null, JSON.parse(body as string));
+      } catch (cause) {
+        done(cause as Error, undefined);
+      }
+    },
+  );
+
   // JWT signer（M01.F05.I06）——LAB_JWT_SECRET ≥32 字节 fail-fast（ADR-0019）
   const labJwt = new LabJwtSigner(
     requireEnv("LAB_JWT_SECRET"),
