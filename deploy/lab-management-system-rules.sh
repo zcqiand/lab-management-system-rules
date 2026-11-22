@@ -36,10 +36,18 @@ if [ -z "$USERNAME" ] || [ -z "$PASSWORD" ]; then
   exit 2
 fi
 
-# rules.env 自举: env 契约 = .env.example 全集 2 key（L0.5 deploy parity 比对基线）。
-# secret 类缺转发 = fail fast（suite 硬规则 §1 纪律）。
+# rules.env 自举: env 契约 = .env.example 全集 10 key（R2 批；L0.5 deploy parity 比对基线）。
+# secret 类缺转发 = fail fast（suite 硬规则 §1 纪律；textrpg v2.0.1 五键先例）。
 if [ -z "${PG_PASSWORD:-}" ]; then
   echo "ERROR: PG_PASSWORD secret required (CI envs 转发;DATABASE_URL 合成必需)" >&2
+  exit 1
+fi
+if [ -z "${LAB_JWT_SECRET:-}" ]; then
+  echo "ERROR: LAB_JWT_SECRET secret required (CI envs 转发;JWT 签发 ≥32 字节 fail-fast)" >&2
+  exit 1
+fi
+if [ -z "${LAB_SAAS_SERVICE_PASSWORD:-}" ]; then
+  echo "ERROR: LAB_SAAS_SERVICE_PASSWORD secret required (CI envs 转发;saas 代理 login 必需)" >&2
   exit 1
 fi
 if [ ! -f "$BASE/rules.env" ]; then
@@ -48,6 +56,15 @@ if [ ! -f "$BASE/rules.env" ]; then
   {
     printf 'SERVER_PORT=5214\n'
     printf 'DATABASE_URL=postgresql://postgres:%s@%s:5432/lab_prod\n' "$PG_PASSWORD" "${PG_HOST:-100.79.128.25}"
+    printf 'LAB_CORS_ALLOWED_ORIGINS=https://lab-nextjs.xiangru.uk\n'
+    printf 'SAAS_IDP_URL=https://saas-nextjs.xiangru.uk\n'
+    printf 'LAB_SAAS_SERVICE_USER=alice\n'
+    printf 'LAB_SAAS_SERVICE_PASSWORD=%s\n' "$LAB_SAAS_SERVICE_PASSWORD"
+    printf 'LAB_SAAS_SERVICE_CLIENT_ID=lab-management\n'
+    printf 'LAB_SAAS_CLIENT_ID=lab-management\n'
+    printf 'LAB_JWT_SECRET=%s\n' "$LAB_JWT_SECRET"
+    printf 'LAB_JWT_ISSUER=lab-management-system\n'
+    printf 'LAB_JWT_TTL_SECONDS=3600\n'
   } > "$BASE/rules.env"
   chown deploy:deploy "$BASE/rules.env" 2>/dev/null || true
   chmod 600 "$BASE/rules.env"
@@ -74,6 +91,15 @@ append_if_missing SERVER_PORT '5214'
 if ! grep -q '^DATABASE_URL=..*' "$BASE/rules.env"; then
   printf 'DATABASE_URL=postgresql://postgres:%s@%s:5432/lab_prod\n' "$PG_PASSWORD" "${PG_HOST:-100.79.128.25}" >> "$BASE/rules.env"
 fi
+append_if_missing LAB_CORS_ALLOWED_ORIGINS 'https://lab-nextjs.xiangru.uk'
+append_if_missing SAAS_IDP_URL 'https://saas-nextjs.xiangru.uk'
+append_if_missing LAB_SAAS_SERVICE_USER 'alice'
+append_if_missing LAB_SAAS_SERVICE_PASSWORD "$LAB_SAAS_SERVICE_PASSWORD"
+append_if_missing LAB_SAAS_SERVICE_CLIENT_ID 'lab-management'
+append_if_missing LAB_SAAS_CLIENT_ID 'lab-management'
+append_if_missing LAB_JWT_SECRET "$LAB_JWT_SECRET"
+append_if_missing LAB_JWT_ISSUER 'lab-management-system'
+append_if_missing LAB_JWT_TTL_SECONDS '3600'
 
 # nginx vhost 重渲染(每次 deploy 都跑,ADR-0018:容器端口变了 vhost 必须跟)。
 # 模板每次都从 master 拉最新 —— VPS 本地老模板会渲染出老端口全家族 502(2026-09-03 事故)。

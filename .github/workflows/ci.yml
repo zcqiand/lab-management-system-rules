@@ -34,14 +34,25 @@ jobs:
           npx --no -- vitest run
 
       - name: 镜像装配冒烟 — build + run + /healthz 200
-        # prod 同款镜像直接拉起（连 Dockerfile 一起验）。R1 env 契约只有
-        # SERVER_PORT fail-fast（DATABASE_URL R2 起接 drizzle 才消费）。
+        # prod 同款镜像直接拉起（连 Dockerfile 一起验）。R2 起 buildApp 装配
+        # JWT signer + CORS，env 契约键 fail-fast——冒烟 env 随 .env.example
+        # 全集扩（占位值；DATABASE_URL 现阶段 boot 期不消费，drizzle 连接惰性）。
         run: |
           docker build -t rules-smoke .
           docker rm -f rules-smoke >/dev/null 2>&1 || true
           docker run -d --name rules-smoke \
             -p 127.0.0.1:5214:5214 \
             --env SERVER_PORT=5214 \
+            --env DATABASE_URL=postgresql://postgres:smoke@127.0.0.1:54321/smoke \
+            --env LAB_CORS_ALLOWED_ORIGINS=http://localhost:5201 \
+            --env SAAS_IDP_URL=http://localhost:5101 \
+            --env LAB_SAAS_SERVICE_USER=alice \
+            --env LAB_SAAS_SERVICE_PASSWORD=smoke-placeholder \
+            --env LAB_SAAS_SERVICE_CLIENT_ID=lab-management \
+            --env LAB_SAAS_CLIENT_ID=lab-management \
+            --env LAB_JWT_SECRET=smoke-secret-0123456789abcdef-32bytes! \
+            --env LAB_JWT_ISSUER=lab-management-system \
+            --env LAB_JWT_TTL_SECONDS=3600 \
             rules-smoke
           ok=""
           for i in $(seq 1 60); do
@@ -72,9 +83,9 @@ jobs:
   # 部署链（lab X18=5214；镜像 lab-go deploy job，tag push 触发）:
   #   docker build & push（latest + tag 双份）→ VPS deploy 脚本拉镜像 + 渲染 nginx vhost
   #   + 起容器 + /healthz 探活。rules.env 由 deploy 脚本自举 .env.example 全集
-  #   2 key（SERVER_PORT + DATABASE_URL——DATABASE_URL R2 消费，自举键集合随
-  #   env 契约齐全，防「扩键不同批=首航假红」指纹）；PG_PASSWORD/PG_HOST 走
-  #   envs 转发（secret 类缺转发 fail-fast）。
+  #   10 key（R2 扩：auth/cors/jwt 全键齐全，防「扩键不同批=首航假红」指纹）；
+  #   secret 类（PG_PASSWORD/LAB_JWT_SECRET/LAB_SAAS_SERVICE_PASSWORD）走
+  #   envs 转发（缺转发 fail-fast）。
   deploy:
     runs-on: ubuntu-latest
     needs: test
@@ -109,13 +120,15 @@ jobs:
         env:
           PG_HOST: ${{ secrets.PG_HOST }}
           PG_PASSWORD: ${{ secrets.PG_PASSWORD }}
+          LAB_JWT_SECRET: ${{ secrets.LAB_JWT_SECRET }}
+          LAB_SAAS_SERVICE_PASSWORD: ${{ secrets.LAB_SAAS_SERVICE_PASSWORD }}
           NGINX_DOMAIN: ${{ vars.NGINX_DOMAIN }}
           NGINX_CERT_BASENAME: ${{ vars.NGINX_CERT_BASENAME }}
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
-          envs: PG_HOST,PG_PASSWORD,NGINX_DOMAIN,NGINX_CERT_BASENAME
+          envs: PG_HOST,PG_PASSWORD,LAB_JWT_SECRET,LAB_SAAS_SERVICE_PASSWORD,NGINX_DOMAIN,NGINX_CERT_BASENAME
           script: |
             # 自举: 首次部署无 /home/deploy/<repo>/ 时自动建 + 拉 deploy 脚本
             set -e

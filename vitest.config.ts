@@ -13,6 +13,7 @@ export default defineConfig({
     environment: "node",
     include: ["tests/**/*.test.{ts,tsx}"],
     exclude: ["node_modules", "dist"],
+    setupFiles: ["tests/setup-env.ts"],
     reporters: ["default", new FnReporter()],
   },
   resolve: {
