@@ -135,31 +135,41 @@ describe("GET/PUT/DELETE /api/report-name-interfaces/{code}", () => {
     expect(res.json().version).toBe(1);
   });
 
-  fnTest(["M06.F09.I05"], "DELETE → 204 幂等 + 级联删 links", async () => {
-    const res = await app.inject({
-      method: "DELETE",
-      url: "/api/report-name-interfaces/R2-SRI-A",
-      headers: authz,
-    });
-    expect(res.statusCode).toBe(204);
-    const again = await app.inject({
-      method: "DELETE",
-      url: "/api/report-name-interfaces/R2-SRI-A",
-      headers: authz,
-    });
-    expect(again.statusCode).toBe(204);
-    const links = await db
-      .select()
-      .from(inspectionReportNameInterfaceLinks)
-      .where(eq(inspectionReportNameInterfaceLinks.reportNameInterfaceCode, "R2-SRI-A"));
-    expect(links).toHaveLength(0);
-  });
+  fnTest(
+    ["M06.F09.I05"],
+    "DELETE → 204；missing → 404（终审 I-1 修正）+ 级联删 links",
+    async () => {
+      const res = await app.inject({
+        method: "DELETE",
+        url: "/api/report-name-interfaces/R2-SRI-A",
+        headers: authz,
+      });
+      expect(res.statusCode).toBe(204);
+      const again = await app.inject({
+        method: "DELETE",
+        url: "/api/report-name-interfaces/R2-SRI-A",
+        headers: authz,
+      });
+      expect(again.statusCode).toBe(404);
+      expect(again.json()).toEqual({
+        code: "NOT_FOUND",
+        message: "报告名称界面不存在",
+      });
+      const links = await db
+        .select()
+        .from(inspectionReportNameInterfaceLinks)
+        .where(
+          eq(inspectionReportNameInterfaceLinks.reportNameInterfaceCode, "R2-SRI-A"),
+        );
+      expect(links).toHaveLength(0);
+    },
+  );
 });
 
 describe("links", () => {
   fnTest(
     ["M06.F09.I06", "M06.F09.I07"],
-    "POST 两连发均 204 幂等 + DELETE 幂等",
+    "POST 201 + dup 400（终审 I-2 修正）+ DELETE 幂等",
     async () => {
       const payload = { reportNameCode: SEED_RN, reportNameInterfaceCode: "R2-SRI-B" };
       const r1 = await app.inject({
@@ -168,14 +178,16 @@ describe("links", () => {
         headers: authz,
         payload,
       });
-      expect(r1.statusCode).toBe(204);
+      expect(r1.statusCode).toBe(201);
+      expect(r1.json().reportNameCode).toBe(SEED_RN);
       const r2 = await app.inject({
         method: "POST",
         url: "/api/report-name-interfaces/links",
         headers: authz,
         payload,
       });
-      expect(r2.statusCode).toBe(204);
+      expect(r2.statusCode).toBe(400);
+      expect(r2.json()).toEqual({ code: "BAD_REQUEST", message: "关联已存在" });
       const rows = await db
         .select()
         .from(inspectionReportNameInterfaceLinks)

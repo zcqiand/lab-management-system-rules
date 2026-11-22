@@ -2,7 +2,7 @@
 // 逐语义镜像 nextjs src/app/api/report-names/**：
 // list Page 回显不切片 + keyword code/name 子串 + id=code 补列（wrapDict 形状）、
 // create code/name 必填 400 + dup 400、PUT PATCH 语义（键集过滤 + updatedAt）、
-// DELETE 204 幂等（plan R2 裁定，非 nextjs missing 404——CT 容 200/204）、
+// DELETE 204 且 missing→404（nextjs 逐字面，终审 I-1 修正）、
 // links POST 204 幂等 upsert（onConflictDoNothing，nextjs 同款）、
 // links DELETE @body 契约 + query 兼容双通道（全键匹配删，未命中也 204）。
 import type { FastifyInstance } from "fastify";
@@ -134,8 +134,13 @@ export async function reportNameRoutes(app: FastifyInstance): Promise<void> {
     const auth = await requireTenant(req.headers.authorization, app.labJwt);
     if ("statusCode" in auth) return reply.code(auth.statusCode).send(auth.body);
     const { code } = req.params as { code: string };
-    // 幂等 204；links 三族由 FK onDelete cascade 级联删
-    await db.delete(inspectionReportNames).where(eq(inspectionReportNames.code, code));
+    // 204；links 三族由 FK onDelete cascade 级联删；missing→404（nextjs 逐字面，
+    // 终审 I-1 修正）
+    const deleted = await db
+      .delete(inspectionReportNames)
+      .where(eq(inspectionReportNames.code, code))
+      .returning();
+    if (!deleted[0]) return notFound(reply, "ReportName not found");
     return reply.code(204).send();
   });
 

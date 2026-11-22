@@ -160,35 +160,40 @@ describe("GET/PUT/DELETE /api/param-interfaces/{code}", () => {
 });
 
 describe("DELETE + links", () => {
-  fnTest(["M06.F08.I05"], "DELETE → 204 幂等 + 级联删 links", async () => {
-    const pre = await app.inject({
-      method: "GET",
-      url: "/api/param-interfaces/R2-PI-A",
-      headers: authz,
-    });
-    expect(pre.statusCode).toBe(200);
-    const res = await app.inject({
-      method: "DELETE",
-      url: "/api/param-interfaces/R2-PI-A",
-      headers: authz,
-    });
-    expect(res.statusCode).toBe(204);
-    const again = await app.inject({
-      method: "DELETE",
-      url: "/api/param-interfaces/R2-PI-A",
-      headers: authz,
-    });
-    expect(again.statusCode).toBe(204);
-    const links = await db
-      .select()
-      .from(inspectionParamInterfaceLinks)
-      .where(eq(inspectionParamInterfaceLinks.paramInterfaceCode, "R2-PI-A"));
-    expect(links).toHaveLength(0);
-  });
+  fnTest(
+    ["M06.F08.I05"],
+    "DELETE → 204；missing → 404（终审 I-1 修正）+ 级联删 links",
+    async () => {
+      const pre = await app.inject({
+        method: "GET",
+        url: "/api/param-interfaces/R2-PI-A",
+        headers: authz,
+      });
+      expect(pre.statusCode).toBe(200);
+      const res = await app.inject({
+        method: "DELETE",
+        url: "/api/param-interfaces/R2-PI-A",
+        headers: authz,
+      });
+      expect(res.statusCode).toBe(204);
+      const again = await app.inject({
+        method: "DELETE",
+        url: "/api/param-interfaces/R2-PI-A",
+        headers: authz,
+      });
+      expect(again.statusCode).toBe(404);
+      expect(again.json()).toEqual({ code: "NOT_FOUND", message: "参数界面不存在" });
+      const links = await db
+        .select()
+        .from(inspectionParamInterfaceLinks)
+        .where(eq(inspectionParamInterfaceLinks.paramInterfaceCode, "R2-PI-A"));
+      expect(links).toHaveLength(0);
+    },
+  );
 
   fnTest(
     ["M06.F08.I06"],
-    "links POST 两连发均 204（幂等 upsert）+ DELETE 幂等",
+    "links POST 201 + dup 400（终审 I-2 修正）+ DELETE 幂等",
     async () => {
       const payload = {
         inspectionParameterCode: LINK_PARAM,
@@ -200,14 +205,16 @@ describe("DELETE + links", () => {
         headers: authz,
         payload,
       });
-      expect(r1.statusCode).toBe(204);
+      expect(r1.statusCode).toBe(201);
+      expect(r1.json().inspectionParameterCode).toBe(LINK_PARAM);
       const r2 = await app.inject({
         method: "POST",
         url: "/api/param-interfaces/links",
         headers: authz,
         payload,
       });
-      expect(r2.statusCode).toBe(204);
+      expect(r2.statusCode).toBe(400);
+      expect(r2.json()).toEqual({ code: "BAD_REQUEST", message: "关联已存在" });
       const rows = await db
         .select()
         .from(inspectionParamInterfaceLinks)

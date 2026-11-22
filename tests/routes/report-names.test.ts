@@ -147,7 +147,7 @@ describe("GET/PUT/DELETE /api/report-names/{code}", () => {
     expect(res.json().sortOrder).toBe(sortOrder);
   });
 
-  fnTest(["M06.F07.I05"], "DELETE → 204 幂等", async () => {
+  fnTest(["M06.F07.I05"], "DELETE → 204；missing → 404（终审 I-1 修正）", async () => {
     const res = await app.inject({
       method: "DELETE",
       url: "/api/report-names/R2-RN-C",
@@ -159,7 +159,8 @@ describe("GET/PUT/DELETE /api/report-names/{code}", () => {
       url: "/api/report-names/R2-RN-C",
       headers: authz,
     });
-    expect(again.statusCode).toBe(204);
+    expect(again.statusCode).toBe(404);
+    expect(again.json()).toEqual({ code: "NOT_FOUND", message: "ReportName not found" });
   });
 });
 

@@ -2,8 +2,9 @@
 // 逐语义镜像 nextjs src/app/api/technical-requirements/** + db-queries-calc-techreq：
 // 3 键路径 = '' 哨兵精确命中（Task 9 Ruling：变体列全 '' 才算命中，变体行不入
 // 三键寻址——非 plan 初稿的 sortOrder 首个，nextjs getTechReqDb 注释明言 calc
-// 域 R6-1 不适用）；PUT PATCH 语义且 PK 8 键成员不可 patch；DELETE 幂等 204
-// 且只删哨兵行（变体族保留，plan R2 裁定，非 nextjs missing→404——CT 容 200/204）；
+// 域 R6-1 不适用）；PUT PATCH 语义且 PK 8 键成员不可 patch；DELETE 只删哨兵行
+// （变体族保留）且 missing→404（nextjs 逐字面，终审 I-1 修正——plan 初稿的
+// 「幂等 204」系对 nextjs 语义误记，已废）；
 // create 缺 comparison → 400 指名（R6-2 fail-fast）、dup 8 键 → 400「已存在」
 // （V020 变体维度）、变体列缺省归一 '' 哨兵；list 行附加派生 id
 // tr-<obj>-<param>-<std>（表无 id 列，契约注记形状）。
@@ -235,8 +236,8 @@ export async function technicalRequirementRoutes(app: FastifyInstance): Promise<
       inspectionParameterCode: string;
       judgmentStandardCode: string;
     };
-    // 幂等 204，且只删哨兵行（变体族保留——旧「删全族」作废）
-    await db
+    // 只删哨兵行（变体族保留——旧「删全族」作废）；missing→404（nextjs 逐字面）
+    const deleted = await db
       .delete(inspectionTechnicalRequirements)
       .where(
         sentinelWhere(
@@ -244,7 +245,11 @@ export async function technicalRequirementRoutes(app: FastifyInstance): Promise<
           p.inspectionParameterCode,
           p.judgmentStandardCode,
         ),
-      );
+      )
+      .returning();
+    if (!deleted[0]) {
+      return notFound(reply, "TechnicalRequirement not found");
+    }
     return reply.code(204).send();
   });
 }

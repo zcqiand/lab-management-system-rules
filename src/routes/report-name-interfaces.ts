@@ -2,9 +2,10 @@
 // src/app/api/report-name-interfaces/** + db-queries interfaceDict 族：
 // list Page 回显不切片（page/pageSize 仅回显，items 全量）、keyword
 // code/name 子串、create dup→400 CONFLICT、config 缺省 {}、version 服务端
-// 缺省 1、PUT PATCH 语义、DELETE 204 幂等（FK cascade 级联删 links）、
-// links POST 204 幂等 upsert（plan R2 裁定，非 nextjs 201+dup400——CT
-// 四方比对容 2xx 且 compare.test 不含 links，契约 void 语义为准）。
+// 缺省 1、PUT PATCH 语义、DELETE 204（FK cascade 级联删 links）且 missing→404、
+// links POST 201 + dup 400「关联已存在」（dup 判定 2 键）、links DELETE 204 幂等
+// ——均 nextjs 逐字面（终审 I-1/I-2 修正，plan 初稿「幂等 204 upsert」系语义
+// 误记，已废）。
 import type { FastifyInstance } from "fastify";
 import { and, eq, sql, type SQL } from "drizzle-orm";
 import { db } from "../db/client.js";
@@ -134,10 +135,13 @@ export async function reportNameInterfaceRoutes(app: FastifyInstance): Promise<v
     const auth = await requireTenant(req.headers.authorization, app.labJwt);
     if ("statusCode" in auth) return reply.code(auth.statusCode).send(auth.body);
     const { code } = req.params as { code: string };
-    // 幂等 204；links 由 FK onDelete cascade 级联删
-    await db
+    // 204；links 由 FK onDelete cascade 级联删；missing→404（nextjs 逐字面，
+    // 终审 I-1 修正）
+    const deleted = await db
       .delete(inspectionReportNameInterfaces)
-      .where(eq(inspectionReportNameInterfaces.code, code));
+      .where(eq(inspectionReportNameInterfaces.code, code))
+      .returning();
+    if (!deleted[0]) return notFound(reply, "报告名称界面不存在");
     return reply.code(204).send();
   });
 
@@ -183,17 +187,26 @@ export async function reportNameInterfaceRoutes(app: FastifyInstance): Promise<v
       createdAt: now(),
       updatedAt: now(),
     };
-    // 幂等 upsert → 204（plan R2 裁定；PG PK = reportName+iface 两键）
-    await db
+    // dup 判定 2 键 = PG PK（reportName+iface，镜像 nextjs createInterfaceLinkDb）；
+    // fresh → 201 行；dup → 400「关联已存在」（终审 I-2 修正，nextjs 逐字面）
+    const dup = await db
+      .select({ reportNameCode: inspectionReportNameInterfaceLinks.reportNameCode })
+      .from(inspectionReportNameInterfaceLinks)
+      .where(
+        and(
+          eq(inspectionReportNameInterfaceLinks.reportNameCode, values.reportNameCode),
+          eq(
+            inspectionReportNameInterfaceLinks.reportNameInterfaceCode,
+            values.reportNameInterfaceCode,
+          ),
+        ),
+      );
+    if (dup.length) return badRequest(reply, "关联已存在");
+    const inserted = await db
       .insert(inspectionReportNameInterfaceLinks)
       .values(values)
-      .onConflictDoNothing({
-        target: [
-          inspectionReportNameInterfaceLinks.reportNameCode,
-          inspectionReportNameInterfaceLinks.reportNameInterfaceCode,
-        ],
-      });
-    return reply.code(204).send();
+      .returning();
+    return reply.code(201).send(toDto(inserted[0] as Row));
   });
 
   app.delete(`${BASE}/links`, async (req, reply) => {

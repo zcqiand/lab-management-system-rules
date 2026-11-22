@@ -10,7 +10,7 @@ import type { FastifyInstance } from "fastify";
 // 数据面：lab_test 真库；FK 前三键用种子现行行 OBJ-SP01-P1 / IP-0001 / GB18242-2008。
 // 3 键路径语义 = '' 哨兵精确命中（Task 9 Ruling，逐字面镜像 nextjs getTechReqDb）：
 // 变体列全 '' 才算命中，变体行不入三键寻址；DELETE 只删哨兵行（变体族保留）。
-// DELETE 幂等 204（plan R2 裁定，非 nextjs missing→404——CT 容 200/204）。
+// DELETE 只删哨兵行且 missing→404（nextjs 逐字面，终审 I-1 修正）。
 
 const app: FastifyInstance = await buildApp();
 const token = await app.labJwt.issue("test-user", "tenant-A");
@@ -237,37 +237,45 @@ describe("GET/PUT/DELETE /api/technical-requirements/{obj}/{param}/{std}", () =>
     },
   );
 
-  fnTest(["M06.F06.I05"], "DELETE→204 幂等；变体族保留（只删哨兵行）", async () => {
-    await db.insert(inspectionTechnicalRequirements).values([
-      {
-        inspectionObjectCode: OBJ,
-        inspectionParameterCode: PARAM,
-        judgmentStandardCode: STD,
-        comparison: "≥",
-      },
-      {
-        inspectionObjectCode: OBJ,
-        inspectionParameterCode: PARAM,
-        judgmentStandardCode: STD,
-        comparison: "≥",
-        brand: "R2-BRAND-KEEP",
-      },
-    ]);
-    try {
-      const res = await app.inject({ method: "DELETE", url: PATH3, headers: authz });
-      expect(res.statusCode).toBe(204);
-      const again = await app.inject({ method: "DELETE", url: PATH3, headers: authz });
-      expect(again.statusCode).toBe(204);
-      const rows = await db
-        .select()
-        .from(inspectionTechnicalRequirements)
-        .where(sentinelWhere());
-      expect(rows).toHaveLength(1);
-      expect(rows[0]!.brand).toBe("R2-BRAND-KEEP");
-    } finally {
-      await cleanupAll();
-    }
-  });
+  fnTest(
+    ["M06.F06.I05"],
+    "DELETE 204→missing 404（终审 I-1 修正）；变体族保留（只删哨兵行）",
+    async () => {
+      await db.insert(inspectionTechnicalRequirements).values([
+        {
+          inspectionObjectCode: OBJ,
+          inspectionParameterCode: PARAM,
+          judgmentStandardCode: STD,
+          comparison: "≥",
+        },
+        {
+          inspectionObjectCode: OBJ,
+          inspectionParameterCode: PARAM,
+          judgmentStandardCode: STD,
+          comparison: "≥",
+          brand: "R2-BRAND-KEEP",
+        },
+      ]);
+      try {
+        const res = await app.inject({ method: "DELETE", url: PATH3, headers: authz });
+        expect(res.statusCode).toBe(204);
+        const again = await app.inject({ method: "DELETE", url: PATH3, headers: authz });
+        expect(again.statusCode).toBe(404);
+        expect(again.json()).toEqual({
+          code: "NOT_FOUND",
+          message: "TechnicalRequirement not found",
+        });
+        const rows = await db
+          .select()
+          .from(inspectionTechnicalRequirements)
+          .where(sentinelWhere());
+        expect(rows).toHaveLength(1);
+        expect(rows[0]!.brand).toBe("R2-BRAND-KEEP");
+      } finally {
+        await cleanupAll();
+      }
+    },
+  );
 });
 
 describe("401 全域", () => {

@@ -2,8 +2,9 @@
 // 逐语义镜像 nextjs src/app/api/calculation-methods/** + db-queries-calc-techreq：
 // 2 键路径 = testingStandardCode 升序首个（R6-1 已人裁——PK 实为 3 键而路径 2 段，
 // mock find 首个语义确定性化）；PUT PATCH 作用于首个行且 PK 三键不可 patch；
-// DELETE 删该 obj+param 全部 standard 行（nextjs 同款；幂等 204——plan R2 裁定，
-// 非 nextjs missing→404——CT 容 200/204）；create 缺 testingStandardCode → 400
+// DELETE 删该 obj+param 全部 standard 行（nextjs 同款）且 missing→404（nextjs
+// 逐字面，终审 I-1 修正——plan 初稿「幂等 204」系语义误记，已废）；
+// create 缺 testingStandardCode → 400
 // 指名（R6-2 fail-fast：库列 NN+PK+FK）、dup 3 键 → 400「已存在」；wire 缺省
 // algorithmType="manual"（照 nextjs 路由实际行为）；行附加派生 id cr-<obj>-<param>。
 import type { FastifyInstance } from "fastify";
@@ -225,8 +226,8 @@ export async function calculationMethodRoutes(app: FastifyInstance): Promise<voi
       inspectionObjectCode: string;
       inspectionParameterCode: string;
     };
-    // 删该 obj+param 全部 standard 行（nextjs 同款）；幂等 204（plan R2 裁定）
-    await db
+    // 删该 obj+param 全部 standard 行（nextjs 同款）；missing→404（nextjs 逐字面）
+    const deleted = await db
       .delete(inspectionCalculationMethods)
       .where(
         and(
@@ -236,7 +237,11 @@ export async function calculationMethodRoutes(app: FastifyInstance): Promise<voi
             p.inspectionParameterCode,
           ),
         ),
-      );
+      )
+      .returning();
+    if (!deleted[0]) {
+      return notFound(reply, "CalculationMethod not found");
+    }
     return reply.code(204).send();
   });
 }

@@ -36,8 +36,24 @@
 - 验证：rules 仓 100/100 双跑全绿 + gate exit 0；CT live 五域+calc 13 文件 138/138
   （CONTRACT_TARGETS=nextjs,rules 双打）；CT gate exit 0（trace mode=live
   executed_per_describe_min=2）
-- 兄弟仓同步清单：contract-test（五域重定向+calc 用例+tr-write 净场，照单回放✓）；
-  shared（calc 契约 tsp 纯增段，待 I 行 --approve 后一并 commit）
+- 兄弟仓同步清单：contract-test（五域重定向+calc 用例+tr-write 净场+终审 I-2 断言
+  收紧，照单回放✓）；shared（calc 契约 tsp 纯增段，待 I 行 --approve 后一并 commit）
+
+### R2 终审修复（2026-11-22，fresh reviewer opus 全分支审：0 Critical / 2 Important）
+
+- **I-1 五域 DELETE-on-missing 204→404**：technical-requirements /
+  calculation-methods / param-interfaces / report-names / report-name-interfaces
+  五域实体 DELETE 未命中行改回 404 `{code:"NOT_FOUND",message}`，message 逐字面
+  镜像 nextjs（"TechnicalRequirement not found" 等）。plan 初稿「幂等 204」系对
+  nextjs 语义误记（plan 自身全局约束「逐字面照抄」矛盾），终审裁定照 spec 修；
+  CT 松 2xx 断言罩不住该分叉——属 wire 语义真分叉，R4 前端换源必咬。
+- **I-2 两个 links POST 204 upsert→201+dup 400**：param-interfaces /links 与
+  report-name-interfaces /links 弃幂等 upsert，改 201 带行 JSON + dup（2 键
+  预查）→400「关联已存在」（镜像 nextjs createInterfaceLinkDb B1 Ruling）；
+  report-names 三 links 族 nextjs 本就 204 upsert，rules 原样保留不动。
+- 验证：先红后绿（7 断言翻红→修→100/100 双跑全绿）；CT live 13 文件 138/138
+  重验 + trace 12 文件 mode=live floor=2 重生成 + CT/rules gate 双 exit 0；
+  行为探针（自建 R2-PROBE-PI 行）live 实证 201/dup400/404 三形状。
 
 ### 挂账（禁顺手做，另批人批）
 

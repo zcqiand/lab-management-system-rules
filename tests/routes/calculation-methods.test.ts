@@ -10,7 +10,7 @@ import type { FastifyInstance } from "fastify";
 // 数据面：lab_test 真库；FK 用种子现行行 OBJ-SP01-P1 / IP-0005 / 两标准码。
 // 2 键路径语义 = testingStandardCode 升序首个（R6-1 已人裁，镜像 nextjs
 // getCalcMethodDb/updateCalcMethodDb）；DELETE 删该 obj+param 全部 standard 行
-// （nextjs 同款；幂等 204——plan R2 裁定，非 nextjs missing→404）。
+// （nextjs 同款）且 missing→404（nextjs 逐字面，终审 I-1 修正）。
 // wire 缺省 algorithmType="manual"（照 nextjs 路由实际行为；DB default 同值）。
 
 const app: FastifyInstance = await buildApp();
@@ -194,7 +194,7 @@ describe("PUT /api/calculation-methods/{obj}/{param}", () => {
 describe("DELETE /api/calculation-methods/{obj}/{param}", () => {
   fnTest(
     ["M06.F05.I05"],
-    "DELETE→204 幂等；删该 obj+param 全部 standard 行",
+    "DELETE→204；missing→404（终审 I-1 修正）；删该 obj+param 全部 standard 行",
     async () => {
       await db.insert(inspectionCalculationMethods).values([
         {
@@ -211,7 +211,11 @@ describe("DELETE /api/calculation-methods/{obj}/{param}", () => {
       const res = await app.inject({ method: "DELETE", url: PATH2, headers: authz });
       expect(res.statusCode).toBe(204);
       const again = await app.inject({ method: "DELETE", url: PATH2, headers: authz });
-      expect(again.statusCode).toBe(204);
+      expect(again.statusCode).toBe(404);
+      expect(again.json()).toEqual({
+        code: "NOT_FOUND",
+        message: "CalculationMethod not found",
+      });
       const rows = await db
         .select()
         .from(inspectionCalculationMethods)
