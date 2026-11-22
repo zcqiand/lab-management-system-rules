@@ -1,7 +1,9 @@
-// 内置函数库（批 2 只注册本批用到的：PI、ROUND_HALF_EVEN；函数库只增不改，spec §3.2）。
+// 内置函数库（函数库只增不改，spec §3.2）：批 2 注册 PI、ROUND_HALF_EVEN；
+// R2 calc 段增 avg（算术均值，brief 用例①公式形状；空参 NaN 由求值器 non-finite→null 兜）。
 export const ENGINE_FUNCTIONS: Record<string, (args: number[]) => number> = {
   PI: () => Math.PI,
   ROUND_HALF_EVEN: (args) => roundHalfEven(args[0]!, args[1]!),
+  avg: (args) => args.reduce((a, b) => a + b, 0) / args.length,
 };
 
 /**

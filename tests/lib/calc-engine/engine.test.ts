@@ -84,6 +84,15 @@ describe("函数与常量", () => {
     expect(out.strengths).toEqual([Math.PI]);
   });
 
+  it("avg 算术均值（R2 calc 段 brief 用例①公式形状，spec §3.2 只增）", () => {
+    const out = evaluateFormula({
+      formula: "avg(R1, R2, R3)",
+      contexts: [{ R1: 33, R2: 34, R3: 35 }],
+    });
+    expect(out.strengths).toEqual([34]);
+    expect(out.mean).toBe(34);
+  });
+
   it("ROUND 内嵌组合", () => {
     const out = evaluateFormula({
       formula: "ROUND_HALF_EVEN(ROUND_HALF_EVEN(1.125, 2) + 0.1, 2)",
