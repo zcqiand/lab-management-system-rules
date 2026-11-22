@@ -13,7 +13,8 @@
 ### deploy 链（2026-11-22，用户指令翻转 spec 裁量 5）
 
 - deploy 四件套（lab-go 先例形状适配 node-service）：`Dockerfile`（node:22-alpine 单段 + tsx 直跑 TS + HEALTHCHECK `wget -q -O /dev/null http://127.0.0.1:5214/healthz` 真拉 GET + EXPOSE 5214 + SERVER_PORT 禁镜像 ENV 兜底）/ `.github/workflows/ci.yml`（test=四门 `npx --no --` 同款 + 镜像装配冒烟 /healthz 200 + POST 405 守卫；deploy=tag 触发 latest+tag 双份 → VPS 脚本）/ `deploy/lab-management-system-rules.sh`（rules.env 自举 .env.example 全集 2 key，DATABASE_URL 由 PG_HOST/PG_PASSWORD 合成 lab_prod）/ `deploy/nginx-vps.conf.example`（lab-rules.xiangru.uk → 127.0.0.1:5214，老 listen 参数语法）
-- 首航 tag `v0.1.0-20261122`；secrets 7 件（DOCKER_USERNAME/PASSWORD、VPS_HOST/USER/SSH_KEY、PG_HOST/PG_PASSWORD）
+- 首航 tag `v0.1.0-20261122`；secrets 7 件（DOCKER_USERNAME/PASSWORD、VPS_HOST/USER/SSH_KEY、PG_HOST/PG_PASSWORD）；run 45014824821 全绿，`https://lab-rules.xiangru.uk/healthz` → `{"ok":true}` 200 + POST 404 live 实证
+- 首航三指纹（三 run 实付）：CI test job 漏 `npm ci`（npx 无 node_modules 假红，run 45014385926）/ 冒烟容器漏 `-p 127.0.0.1:5214:5214` 端口发布（容器内 HEALTHCHECK 200 蒙混，宿主 curl 摸不进，run 45014475098）/ POST 守卫 405→404（Fastify 未匹配方法默认 404，405 是 go/net-http ServeMux 语义勿混抄，run 45014683832）
 - 本机无 docker——装配冒烟由 CI test job 承担（lab-go 同款姿态）
 
 ### 挂账（禁顺手做，另批人批）
