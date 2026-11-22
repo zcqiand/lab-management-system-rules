@@ -1,0 +1,124 @@
+name: ci
+
+# lab-management-system-rules (node-service 栈：Fastify 5 + TS 6 strict + Vitest 4)
+# 家族原则（镜像 lab-go/kotlin ci.yml 注释）：CI=门内静态+test + 镜像装配冒烟；
+# suite gate=全量（L0.5 deploy parity 在本地跑）。四门命令形状=mold
+# node-service.toml [gates] 逐字同款（npx --no -- 分隔，npx 假绿事故纪律）。
+# R1 无 DB 接线（引擎纯函数 + health inject），无需 postgres service——R2 起
+# 接 drizzle 时照 lab-go 加 service 容器。
+on:
+  push:
+    branches: [master]
+    tags: ["v*"]
+  pull_request:
+    branches: [master]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: L1-L4 — prettier + eslint + tsc + vitest（stack.json 门命令同款）
+        run: |
+          npx --no -- prettier --check src tests
+          npx --no -- eslint src tests
+          npx --no -- tsc --noEmit
+          npx --no -- vitest run
+
+      - name: 镜像装配冒烟 — build + run + /healthz 200
+        # prod 同款镜像直接拉起（连 Dockerfile 一起验）。R1 env 契约只有
+        # SERVER_PORT fail-fast（DATABASE_URL R2 起接 drizzle 才消费）。
+        run: |
+          docker build -t rules-smoke .
+          docker rm -f rules-smoke >/dev/null 2>&1 || true
+          docker run -d --name rules-smoke \
+            --env SERVER_PORT=5214 \
+            rules-smoke
+          ok=""
+          for i in $(seq 1 60); do
+            body="$(curl -fsS --max-time 3 http://127.0.0.1:5214/healthz 2>/dev/null || true)"
+            if [ -n "$body" ]; then
+              echo "→ /healthz: $body"
+              echo "$body" | grep -q '"ok":true' && ok=1 && break
+            fi
+            sleep 1
+          done
+          if [ -z "$ok" ]; then
+            echo "ERROR: rules smoke /healthz 未 200（60s 上限），容器日志:" >&2
+            docker logs rules-smoke 2>&1 | tail -40 >&2
+            docker rm -f rules-smoke >/dev/null 2>&1 || true
+            exit 1
+          fi
+          # 405 守卫（REQ-2026-001 形态）：POST /healthz 拒绝
+          code="$(curl -fsS -o /dev/null -w '%{http_code}' -X POST --max-time 3 http://127.0.0.1:5214/healthz 2>/dev/null || true)"
+          echo "→ POST /healthz: $code"
+          if [ "$code" != "405" ]; then
+            echo "ERROR: POST /healthz 非 405" >&2
+            docker rm -f rules-smoke >/dev/null 2>&1 || true
+            exit 1
+          fi
+          docker rm -f rules-smoke >/dev/null 2>&1 || true
+
+  # 部署链（lab X18=5214；镜像 lab-go deploy job，tag push 触发）:
+  #   docker build & push（latest + tag 双份）→ VPS deploy 脚本拉镜像 + 渲染 nginx vhost
+  #   + 起容器 + /healthz 探活。rules.env 由 deploy 脚本自举 .env.example 全集
+  #   2 key（SERVER_PORT + DATABASE_URL——DATABASE_URL R2 消费，自举键集合随
+  #   env 契约齐全，防「扩键不同批=首航假红」指纹）；PG_PASSWORD/PG_HOST 走
+  #   envs 转发（secret 类缺转发 fail-fast）。
+  deploy:
+    runs-on: ubuntu-latest
+    needs: test
+    if: startsWith(github.ref, 'refs/tags/')
+    concurrency:
+      group: deploy-${{ github.event.repository.name }}-${{ github.ref }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ secrets.DOCKER_USERNAME }}/${{ github.event.repository.name }}:latest
+            ${{ secrets.DOCKER_USERNAME }}/${{ github.event.repository.name }}:${{ github.ref_name }}
+
+      - name: Pull image and restart container on VPS
+        uses: appleboy/ssh-action@v1
+        # appleboy/ssh-action@v1 的 ${{ secrets.* }} 不会自动进 SSH 远端 shell;
+        # step env 注入 Actions env,with.envs 列出要转发的名字 (逗号分隔)。
+        env:
+          PG_HOST: ${{ secrets.PG_HOST }}
+          PG_PASSWORD: ${{ secrets.PG_PASSWORD }}
+          NGINX_DOMAIN: ${{ vars.NGINX_DOMAIN }}
+          NGINX_CERT_BASENAME: ${{ vars.NGINX_CERT_BASENAME }}
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          envs: PG_HOST,PG_PASSWORD,NGINX_DOMAIN,NGINX_CERT_BASENAME
+          script: |
+            # 自举: 首次部署无 /home/deploy/<repo>/ 时自动建 + 拉 deploy 脚本
+            set -e
+            REPO="${{ github.event.repository.name }}"
+            DEPLOY_DIR="/home/deploy/$REPO"
+            mkdir -p "$DEPLOY_DIR"
+            cd "$DEPLOY_DIR"
+            # 总是重拉最新 deploy 脚本（脚本 bug fix 立即生效）；nginx 模板由脚本自拉
+            curl -fsSL "https://raw.githubusercontent.com/zcqiand/${REPO}/refs/heads/master/deploy/${REPO}.sh" -o "$REPO.sh"
+            chmod +x "$REPO.sh"
+            sh "$REPO.sh" "${{ secrets.DOCKER_USERNAME }}" "${{ secrets.DOCKER_PASSWORD }}" "${{ github.ref_name }}"
