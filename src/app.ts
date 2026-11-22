@@ -1,8 +1,10 @@
 import Fastify, { type FastifyInstance } from "fastify";
 import cors from "@fastify/cors";
 import { healthRoutes } from "./routes/health.js";
+import { authRoutes } from "./routes/auth.js";
 import { requireEnv } from "./lib/env-required.js";
 import { LabJwtSigner } from "./lib/auth/jwt.js";
+import type { SaasFetch } from "./lib/auth/saas-client.js";
 
 declare module "fastify" {
   interface FastifyInstance {
@@ -13,8 +15,11 @@ declare module "fastify" {
 /**
  * 纯装配：注册路由，不 listen。测试与 server.ts 共用。
  * 各域路由（R2 起五域 + calc）一律挂在这里，禁散落启动面。
+ * opts.saasFetch 仅测试注入（打桩 saas upstream）；缺省=全局 fetch。
  */
-export async function buildApp(): Promise<FastifyInstance> {
+export async function buildApp(
+  opts: { saasFetch?: SaasFetch } = {},
+): Promise<FastifyInstance> {
   const app = Fastify({ logger: true });
 
   // JWT signer（M01.F05.I06）——LAB_JWT_SECRET ≥32 字节 fail-fast（ADR-0019）
@@ -33,5 +38,6 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(cors, { origin: corsOrigins });
 
   await app.register(healthRoutes);
+  await app.register(authRoutes, { saasFetch: opts.saasFetch });
   return app;
 }
