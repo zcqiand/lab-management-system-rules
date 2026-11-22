@@ -40,6 +40,7 @@ jobs:
           docker build -t rules-smoke .
           docker rm -f rules-smoke >/dev/null 2>&1 || true
           docker run -d --name rules-smoke \
+            -p 127.0.0.1:5214:5214 \
             --env SERVER_PORT=5214 \
             rules-smoke
           ok=""
