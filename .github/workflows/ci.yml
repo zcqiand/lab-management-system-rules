@@ -58,11 +58,12 @@ jobs:
             docker rm -f rules-smoke >/dev/null 2>&1 || true
             exit 1
           fi
-          # 405 守卫（REQ-2026-001 形态）：POST /healthz 拒绝
+          # 方法守卫（REQ-2026-001 形态）：POST /healthz 拒绝。
+          # Fastify 语义=未匹配方法 404（go/net-http ServeMux 是 405，勿混抄）
           code="$(curl -fsS -o /dev/null -w '%{http_code}' -X POST --max-time 3 http://127.0.0.1:5214/healthz 2>/dev/null || true)"
           echo "→ POST /healthz: $code"
-          if [ "$code" != "405" ]; then
-            echo "ERROR: POST /healthz 非 405" >&2
+          if [ "$code" != "404" ]; then
+            echo "ERROR: POST /healthz 非 404" >&2
             docker rm -f rules-smoke >/dev/null 2>&1 || true
             exit 1
           fi
