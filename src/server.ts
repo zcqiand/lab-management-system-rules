@@ -6,7 +6,9 @@ import { buildApp } from "./app.js";
  */
 const port = Number(process.env.SERVER_PORT);
 if (!process.env.SERVER_PORT || !Number.isInteger(port) || port <= 0) {
-  console.error("[server] SERVER_PORT 未设置或非法（家族统一键），startup fail-fast，禁默认兜底");
+  process.stderr.write(
+    "[server] SERVER_PORT 未设置或非法，startup fail-fast，禁默认兜底\n",
+  );
   process.exit(1);
 }
 
